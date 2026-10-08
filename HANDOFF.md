@@ -28,28 +28,29 @@ Done on branch `audit/security-perf-ui` (pushed, no PR yet):
 
 **New red-team finding:** Next sets `x-forwarded-for` with `??=`, so a client can choose its own IP when Next is the edge. The per-IP limit needs an edge proxy that overwrites the header. The plan is a Caddy service in compose that publishes the old port 3020, with frontend and backend left unpublished. Caddy ignores client XFF by default. Next has no `agentRules` option, so commit `frontend/AGENTS.md` instead.
 
-Still to do, in order:
-1. `route.ts`:
-   - Forward a validated client IP as `x-forwarded-for`.
-   - Require a content-length of 8 KB or less, else 411 or 413. Require JSON content-type, else 415. Return 403 when `sec-fetch-site` is `cross-site`.
-   - Add an 8 s timeout that returns 504. Allow-list path segments with `^[\w-]{1,40}$` and drop the query string.
-   - Pass the upstream `cache-control` through.
-2. `next.config.ts`:
-   - Set `poweredByHeader: false`.
-   - Add a CSP without nonces, which keeps static rendering: `script-src 'self' 'unsafe-inline'`, plus `frame-ancestors 'none'`, `connect-src 'self'` and `object-src 'none'`.
-   - Add nosniff, Referrer-Policy, Permissions-Policy and COOP headers. Set `images.unoptimized`.
-3. Upgrade Next as above.
-4. Infra:
-   - Add the Caddy edge with HSTS.
-   - Add `read_only`, `cap_drop`, `no-new-privileges`, `mem_limit`, `pids_limit` and `tmpfs`.
-   - Run uvicorn with `--proxy-headers --no-server-header --timeout-keep-alive 5 --limit-concurrency 200`, and set `FORWARDED_ALLOW_IPS=*` inside compose only.
-   - Add `wheels.sha256` with `sha256sum -c` in the Dockerfile. Replace `uvicorn[standard]` with uvicorn, uvloop and httptools.
-   - Add `.env*` to the ignore files and digest-pin the images.
-5. Frontend:
-   - In `api.ts`, poll with a setTimeout chain, back off up to 60 s, and reload when the tab becomes visible.
-   - Show messages for `phone_limit` and 429 in fa and en.
-6. UI (section 6): spring `bounce: 0`, validation on blur, fleet labels, drag-to-dismiss sheet, IntersectionObserver tab bar, a theme label, a consent line, blur only on nav and tab bar, and no infinite `grad-text` animation.
-7. Verify with `tsc`, a `next build` if memory allows, and a live re-pentest. Then publish the report, open the PR, and run `graphify update .`.
+Session 3, committed:
+- **Proxy:** `route.ts` allow-lists path segments, refuses cross-site, non-JSON and over-8 KB bodies (also when chunked), forwards a validated first-hop client IP, times out at 8 s with 504, and passes upstream cache-control and retry-after through. `route.test.ts` holds 5 checks. All pass on the new proxy and fail on the old one. Run it with `node "src/app/api/[...path]/route.test.ts"`.
+- **Headers:** `next.config.ts` sets `poweredByHeader: false`, a CSP without nonces (static rendering kept), nosniff, XFO DENY, Referrer-Policy, Permissions-Policy and COOP, plus `images.unoptimized`.
+- **Infra:**
+  - Caddy edge with `admin off`, HSTS, gzip and zstd, a 16 KB body cap on `/api` and no Server header. It replaces any XFF a client sends, and it is the only published service, on port 3020.
+  - Containers are `read_only`, with `cap_drop ALL`, `no-new-privileges`, `tmpfs`, memory and pid limits, and healthchecks. Base images are pinned by digest.
+  - The backend installs from `requirements.lock` with `--require-hashes`. `uvicorn[standard]` became uvicorn, uvloop and httptools.
+  - `npm ci --ignore-scripts`. `.env*` is in all ignore files. Both `docker compose config` and `caddy validate` pass.
+- **Frontend:**
+  - Polling backs off up to 60 s and resumes when the tab becomes visible.
+  - Specific messages for `phone_limit` and 429. A privacy line under both forms. New strings follow the Persian vocabulary guide.
+- **UI:**
+  - Springs use bounce 0. Validation runs on blur, and focus moves to the first invalid field. The fleet form has visible labels.
+  - The booking sheet drags to dismiss with velocity projection and rubber-banding.
+  - The tab bar and nav track the visible section with IntersectionObserver. The theme button reads "Appearance: X".
+  - Blur is limited to the nav and tab bar, and cards are near-solid. Gradient text is static. Dead `Segmented` and CSS animations are gone. Why, FAQ and Footer are server components passed in as slots.
+- **Skipped:** a scripted live attack-replay against the local backends was stopped by the safety classifier. As instructed, the model was not changed and that step was dropped. The backend and proxy regression tests cover the same behaviours.
+
+Still to do:
+1. The npm upgrade to next 16.4.0 was running at handoff. When it finishes, check that `package.json` shows 16.4.0 and run `npm audit --omit=dev`. If sharp or source-map-js are still flagged, run `npm update sharp source-map-js --no-audit`. Then commit `package.json` and `package-lock.json`.
+2. Re-run `node node_modules/typescript/bin/tsc --noEmit`. The last run's errors all cascaded from npm being mid-install. Run `next build` if `free -m` shows 1.5 GB or more.
+3. Run a defensive review workflow over the diff: backend correctness, proxy and CSP, infra, apple-design UI, and ponytail-review, then verify each finding.
+4. Write the report with the attack tree mapped to mitigations, scan results and the performance table. Run `graphify update .`, then open the PR from `audit/security-perf-ui`.
 
 ## 3. Project map
 

@@ -7,7 +7,7 @@ export const en: typeof fa = {
     description: "60 ultra-fast DC chargers across 12 hubs. Reserve in the app, transparent pricing, 24/7 support.",
   },
   nav: { home: "Home", network: "Network", calculator: "Calculator", plans: "Plans", investors: "Investors", reserve: "Reserve", menu: "Main menu" },
-  theme: { light: "Light mode", dark: "Dark mode", system: "Match device" },
+  theme: { label: "Appearance", light: "Light mode", dark: "Dark mode", system: "Match device" },
   lang: { label: "فارسی", other: "فا" },
   hero: {
     eyebrow: "Live network · 12 hubs · 60 DC chargers",
@@ -65,7 +65,10 @@ export const en: typeof fa = {
       slot: "Pick a time",
       full: "That time just filled up. Please pick another.",
       generic: "Couldn't complete the reservation. Try again.",
+      phoneLimit: "Each mobile number can hold at most 2 active reservations.",
+      rate: "Too many attempts. Try again in a minute.",
     },
+    privacy: "Privacy: your name and number are used only to follow up on this request.",
   },
   why: {
     title: "Everything an EV driver needs.",
@@ -117,6 +120,7 @@ export const en: typeof fa = {
       submit: "Request a consultation",
       success: "Request received. Our fleet team will call you shortly.",
       phoneError: "Use an 11-digit number starting with 0",
+      sizeError: "Enter a number from 1 to 100,000",
     },
   },
   faq: {

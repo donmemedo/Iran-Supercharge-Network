@@ -1,0 +1,20 @@
+# Edge proxy. Its main security job: it REPLACES any X-Forwarded-For a client sends with the real peer address
+# (Caddy ignores forwarded headers from untrusted clients), so the per-client write limit can't be dodged by
+# forging that header. Next.js alone would keep a client-sent value.
+# Local default serves plain HTTP on :80 (published as 3020). Set SITE_ADDRESS=your.domain for automatic HTTPS.
+{
+	admin off
+}
+
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	@api path /api/*
+	request_body @api {
+		max_size 16KB
+	}
+	reverse_proxy frontend:3000
+}

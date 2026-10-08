@@ -1,3 +1,6 @@
+# Runtime only. Tests also need: httpx==0.28.1
+# uvicorn without [standard]: keeps uvloop + httptools (speed), drops watchfiles, websockets, pyyaml and python-dotenv (unused attack surface).
 fastapi==0.141.1
-uvicorn[standard]==0.53.0
-httpx==0.28.1
+uvicorn==0.53.0
+uvloop==0.22.1
+httptools==0.8.0

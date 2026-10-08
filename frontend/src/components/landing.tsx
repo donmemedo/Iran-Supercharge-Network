@@ -1,24 +1,17 @@
 "use client";
 import Link from "next/link";
-import { useId, useState, type ReactNode } from "react";
-import { ArrowUpLeft, ArrowUpRight, BatteryCharging, CalendarClock, Check, Headset, Leaf, Plus, PlugZap, ReceiptText, Sun, Truck, WifiOff, Zap } from "lucide-react";
+import { useId, useRef, useState, type ReactNode } from "react";
+import { ArrowUpLeft, ArrowUpRight, BatteryCharging, CalendarClock, Check, Leaf, Truck, WifiOff, Zap } from "lucide-react";
 import { fill } from "@/i18n";
 import { useI18n } from "@/i18n/use";
-import { api, usePoll, type Hub, type Network } from "@/lib/api";
+import { api, ApiError, usePoll, type Hub, type Network } from "@/lib/api";
 import { compact, num, toAscii } from "@/lib/format";
 import { Card } from "./ui";
 import { ReserveSheet } from "./reserve";
+import { H2, Reveal } from "./sections";
 
-export const Reveal = ({ children, className = "" }: { children: ReactNode; className?: string }) => <div className={`reveal ${className}`}>{children}</div>;
-
-const H2 = ({ children, sub }: { children: ReactNode; sub?: string }) => (
-  <Reveal className="mb-10 max-w-2xl">
-    <h2 className="display tight text-4xl font-bold sm:text-5xl">{children}</h2>
-    {sub && <p className="mt-3 text-lg text-muted">{sub}</p>}
-  </Reveal>
-);
-
-export function Landing() {
+/** Interactive shell. The static sections (why, faq, footer) arrive pre-rendered from the server as slots. */
+export function Landing({ why, faq, footer }: { why: ReactNode; faq: ReactNode; footer: ReactNode }) {
   const { data, error } = usePoll<Network>("network", 5000);
   const [hub, setHub] = useState<Hub | null>(null);
   return (
@@ -27,11 +20,11 @@ export function Landing() {
         <Hero />
         <LiveStrip data={data} error={error} />
         <NetworkSection data={data} onReserve={setHub} />
-        <Why />
+        {why}
         <Calc price={data?.price.toman_per_kwh ?? 6500} />
         <Plans />
-        <Faq />
-        <Footer />
+        {faq}
+        {footer}
       </main>
       <ReserveSheet hub={hub} onClose={() => setHub(null)} />
     </>
@@ -318,35 +311,6 @@ function NetworkSection({ data, onReserve }: { data: Network | null; onReserve: 
   );
 }
 
-/* ---------------- why ---------------- */
-
-const WHY_ICONS = [CalendarClock, ReceiptText, PlugZap, Headset, Sun, Truck];
-
-function Why() {
-  const { t } = useI18n();
-  return (
-    <section className="py-16">
-      <H2>{t.why.title}</H2>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {t.why.items.map((it, i) => {
-          const Icon = WHY_ICONS[i];
-          return (
-            <Reveal key={it.t}>
-              <Card className={`h-full p-7 ${i === 0 ? "ring-glow" : ""}`}>
-                <span className="grid size-12 place-items-center rounded-2xl bg-accent/12 text-accent">
-                  <Icon className="size-6" aria-hidden />
-                </span>
-                <h3 className="tight-sm mt-5 text-xl font-semibold">{it.t}</h3>
-                <p className="mt-2 text-muted">{it.d}</p>
-              </Card>
-            </Reveal>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 /* ---------------- calculator ---------------- */
 
 function Slider({ label, value, set, min, max, step, unit }: { label: string; value: number; set: (v: number) => void; min: number; max: number; step: number; unit: string }) {
@@ -435,23 +399,53 @@ function Calc({ price }: { price: number }) {
 function FleetForm() {
   const { locale, t } = useI18n();
   const f = t.plans.fleet;
-  const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
-  const [phoneErr, setPhoneErr] = useState(false);
-  const input = "min-h-12 w-full rounded-2xl border border-line bg-bg/60 px-4 text-base outline-none focus:border-accent";
+  const form = useRef<HTMLFormElement>(null);
+  const [state, setState] = useState<"idle" | "sending" | "done" | "error" | "rate">("idle");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const check = (k: string, v: string) => {
+    const a = toAscii(v).trim();
+    if (!a) return t.reserve.errors.required;
+    if (k === "company") return a.length < 2 ? t.reserve.errors.required : "";
+    if (k === "size") return /^\d+$/.test(a) && +a >= 1 && +a <= 100000 ? "" : f.sizeError;
+    return /^0\d{10}$/.test(a.replace(/\D/g, "")) ? "" : f.phoneError;
+  };
+  const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    if (value || errors[name]) setErrors((x) => ({ ...x, [name]: check(name, value) }));
+  };
+  const onInput = (e: React.FormEvent<HTMLInputElement>) => {
+    const { name, value } = e.currentTarget;
+    if (errors[name] && !check(name, value)) setErrors((x) => ({ ...x, [name]: "" }));
+  };
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const d = new FormData(e.currentTarget);
-    const phone = toAscii(String(d.get("phone"))).replace(/\D/g, "");
-    if (!/^0\d{10}$/.test(phone)) return setPhoneErr(true);
-    setPhoneErr(false);
+    const v = (k: string) => String(d.get(k) ?? "");
+    const err = Object.fromEntries(["company", "size", "phone"].map((k) => [k, check(k, v(k))]));
+    setErrors(err);
+    const bad = Object.keys(err).find((k) => err[k]);
+    if (bad) return form.current?.querySelector<HTMLElement>(`[name=${bad}]`)?.focus();
     setState("sending");
     try {
-      await api("leads", { company: String(d.get("company")).trim(), kind: d.get("kind"), fleet_size: Number(toAscii(String(d.get("size")))), phone });
+      await api("leads", { company: v("company").trim(), kind: v("kind"), fleet_size: Number(toAscii(v("size"))), phone: toAscii(v("phone")).replace(/\D/g, "") });
       setState("done");
-    } catch {
-      setState("error");
+    } catch (x) {
+      setState(x instanceof ApiError && x.status === 429 ? "rate" : "error");
     }
   };
+  const input = "mt-1.5 min-h-12 w-full rounded-2xl border border-line bg-bg/60 px-4 text-base outline-none focus:border-accent aria-[invalid=true]:border-neg";
+  const Field = ({ k, label, children }: { k: string; label: string; children: ReactNode }) => (
+    <label className="text-sm font-medium text-muted">
+      {label}
+      {children}
+      {errors[k] && (
+        <p id={`fl-${k}`} className="mt-1 text-xs text-neg">
+          {errors[k]}
+        </p>
+      )}
+    </label>
+  );
+  const props = (k: string) => ({ name: k, onBlur, onInput, "aria-invalid": !!errors[k], "aria-describedby": `fl-${k}`, className: input });
   return (
     <Card className="p-6 sm:p-9 lg:col-span-3">
       <div className="grid gap-8 lg:grid-cols-[1fr_1.4fr]">
@@ -465,28 +459,25 @@ function FleetForm() {
             <Check className="size-6" aria-hidden /> {f.success}
           </p>
         ) : (
-          <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
-            <input name="company" required minLength={2} maxLength={80} placeholder={f.company} aria-label={f.company} className={input} />
-            <select name="kind" aria-label={f.kind} className={input} defaultValue="taxi">
-              {Object.entries(f.kinds).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-            <input name="size" required type="number" min={1} max={100000} placeholder={f.size} aria-label={f.size} className={input} />
-            <div>
-              <input name="phone" required inputMode="tel" dir="ltr" placeholder={f.phone} aria-label={f.phone} aria-invalid={phoneErr} aria-describedby="fleet-phone-err" className={`${input} ${locale === "fa" ? "text-right" : ""}`} />
-              {phoneErr && (
-                <p id="fleet-phone-err" className="mt-1 text-xs text-neg">
-                  {f.phoneError}
-                </p>
-              )}
-            </div>
+          <form ref={form} onSubmit={submit} noValidate className="grid gap-4 sm:grid-cols-2">
+            {Field({ k: "company", label: f.company, children: <input {...props("company")} autoComplete="organization" maxLength={80} /> })}
+            <label className="text-sm font-medium text-muted">
+              {f.kind}
+              <select name="kind" className={input} defaultValue="taxi">
+                {Object.entries(f.kinds).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {Field({ k: "size", label: f.size, children: <input {...props("size")} inputMode="numeric" dir="ltr" className={`${input} ${locale === "fa" ? "text-right" : ""}`} /> })}
+            {Field({ k: "phone", label: f.phone, children: <input {...props("phone")} autoComplete="tel" inputMode="tel" dir="ltr" className={`${input} ${locale === "fa" ? "text-right" : ""}`} /> })}
             <button disabled={state === "sending"} className="press btn-primary min-h-12 rounded-full font-semibold disabled:opacity-60 sm:col-span-2">
               {state === "sending" ? t.reserve.sending : f.submit}
             </button>
-            {state === "error" && <p className="text-sm text-neg sm:col-span-2">{t.reserve.errors.generic}</p>}
+            {(state === "error" || state === "rate") && <p role="alert" className="text-sm text-neg sm:col-span-2">{state === "rate" ? t.reserve.errors.rate : t.reserve.errors.generic}</p>}
+            <p className="text-xs text-faint sm:col-span-2">{t.reserve.privacy}</p>
           </form>
         )}
       </div>
@@ -537,37 +528,5 @@ function Plans() {
         <FleetForm />
       </div>
     </section>
-  );
-}
-
-/* ---------------- faq + footer ---------------- */
-
-function Faq() {
-  const { t } = useI18n();
-  return (
-    <section className="py-16">
-      <H2>{t.faq.title}</H2>
-      <div className="grid gap-3">
-        {t.faq.items.map((it) => (
-          <details key={it.q} className="faq glass rounded-[22px] px-6">
-            <summary className="flex min-h-16 items-center justify-between gap-4 text-lg font-semibold">
-              {it.q}
-              <Plus className="chev size-5 shrink-0 text-muted" aria-hidden />
-            </summary>
-            <p className="pb-6 text-muted">{it.a}</p>
-          </details>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export function Footer() {
-  const { t } = useI18n();
-  return (
-    <footer className="mt-16 border-t border-line pt-8 text-sm text-faint">
-      <p className="font-semibold text-muted">{t.brand}</p>
-      <p className="mt-2 max-w-3xl">{t.footer.note}</p>
-    </footer>
   );
 }
