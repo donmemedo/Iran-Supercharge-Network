@@ -6,4 +6,8 @@ backend/data/
 *.log
 
 Docs
-.idea
+.ideagraphify-out/cache/
+graphify-out/.graphify_*
+graphify-out/manifest.json
+graphify-out/cost.json
+.env*
