@@ -71,6 +71,10 @@ MAX_ROWS = 10_000  # ponytail: in-memory store, lost on restart; move to Postgre
 MAX_BODY = 8 * 1024  # largest valid JSON body is ~250 bytes
 RATE_N, RATE_WINDOW = 10, 60.0  # writes per client per minute; NAT'd mobile users share an IP, so keep it loose
 MAX_PER_PHONE = 2  # active reservations per phone number
+# Phones are unverified, so one client could rotate numbers. Cap active bookings per client as well. Kept above 2 because
+# carrier-grade NAT puts many drivers behind one IP. ponytail: SMS OTP on booking is the real fix.
+MAX_PER_CLIENT = 6
+MAX_LEADS_PER_CLIENT = 20
 _LOG_KEY = secrets.token_bytes(16)  # phones in logs are keyed hashes: linkable within a run, not reversible
 
 
@@ -153,13 +157,13 @@ def slot_capacity(hid: str, slot: datetime) -> int:
 
 def client_key(host: str | None) -> str:
     """Rate-limit identity. One IPv6 /64 is one subscriber, otherwise rotating addresses dodges the limit."""
-    ip = host or "unknown"
-    if ":" in ip:
-        try:
-            return str(ipaddress.ip_network(f"{ip}/64", strict=False))
-        except ValueError:
-            pass
-    return ip
+    try:
+        a = ipaddress.ip_address(host or "")
+    except ValueError:
+        return host or "unknown"
+    if a.version == 6 and a.ipv4_mapped:  # ::ffff:1.2.3.4 is an IPv4 client, not one shared /64
+        return str(a.ipv4_mapped)
+    return str(ipaddress.ip_network(f"{a}/64", strict=False)) if a.version == 6 else str(a)
 
 
 def check_rate(key: str) -> None:
@@ -255,19 +259,22 @@ def reserve(body: ReservationIn, request: Request):
         check_rate(key)
         if body.hub_id not in HUB or not HUB[body.hub_id][6]:
             raise HTTPException(404, "hub_not_found")
-        slot = body.slot.astimezone(IRT)
-        if slot not in upcoming_slots(now):
+        # compare, don't convert: astimezone() overflows (500) on schema-valid years like 0001 or 9999
+        slot = next((s for s in upcoming_slots(now) if s == body.slot), None)
+        if slot is None:
             raise HTTPException(409, "slot_unavailable")
         prune(now)
         if sum(r["phone"] == body.phone for r in _reservations.values()) >= MAX_PER_PHONE:  # n <= live seats (~500)
             raise HTTPException(409, "phone_limit")
+        if sum(r["client"] == key for r in _reservations.values()) >= MAX_PER_CLIENT:
+            raise HTTPException(409, "client_limit")
         if len(_reservations) >= MAX_ROWS or slot_capacity(body.hub_id, slot) <= 0:
             raise HTTPException(409, "slot_full")
         while (code := "ISN-" + secrets.token_hex(4).upper()) in _reservations:  # 4.3B codes, retry on the rare clash
             pass
         k = (body.hub_id, slot.isoformat())
         _booked[k] = _booked.get(k, 0) + 1
-        _reservations[code] = {"code": code, "hub_id": body.hub_id, "slot": slot.isoformat(), "name": body.name, "phone": body.phone}
+        _reservations[code] = {"code": code, "hub_id": body.hub_id, "slot": slot.isoformat(), "name": body.name, "phone": body.phone, "client": key}
     log.info("reserved hub=%s slot=%s client=%s phone=%s", body.hub_id, k[1], key, tag(body.phone))
     return {"code": code, "hub_id": body.hub_id, "slot": k[1], "name": body.name, "hold_minutes": 10, "toman_per_kwh": tariff(slot)[1]}
 
@@ -285,9 +292,13 @@ def lead(body: LeadIn, request: Request):
     key = client_key(request.client and request.client.host)
     with _lock:
         check_rate(key)
-        if body.phone not in _leads and len(_leads) >= MAX_ROWS:
-            raise HTTPException(503, "try_later")
-        _leads[body.phone] = body.model_dump()
+        if body.phone not in _leads:
+            if len(_leads) >= MAX_ROWS:
+                log.error("lead_store_full")  # alert: in-memory cap reached; move leads to a database
+                raise HTTPException(503, "try_later")
+            if sum(x["client"] == key for x in _leads.values()) >= MAX_LEADS_PER_CLIENT:  # ponytail: O(n<=10k) scan, a Counter if it ever shows up in a profile
+                raise HTTPException(409, "client_limit")
+        _leads[body.phone] = {**body.model_dump(), "client": key}
     log.info("lead kind=%s fleet=%d client=%s phone=%s", body.kind, body.fleet_size, key, tag(body.phone))
     return {"ok": True}  # no row id: a counter would leak how many leads exist
 

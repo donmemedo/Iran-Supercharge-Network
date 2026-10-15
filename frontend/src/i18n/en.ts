@@ -66,6 +66,7 @@ export const en: typeof fa = {
       full: "That time just filled up. Please pick another.",
       generic: "Couldn't complete the reservation. Try again.",
       phoneLimit: "Each mobile number can hold at most 2 active reservations.",
+      clientLimit: "This connection already holds the maximum number of active reservations.",
       rate: "Too many attempts. Try again in a minute.",
     },
     privacy: "Privacy: your name and number are used only to follow up on this request.",

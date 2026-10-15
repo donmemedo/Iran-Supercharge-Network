@@ -33,7 +33,8 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
     if (req.headers.get("sec-fetch-site") === "cross-site") return fail("cross_site", 403);
     // JSON-only also forces a CORS preflight on cross-origin fetch, which this route never answers.
     if (!req.headers.get("content-type")?.startsWith("application/json")) return fail("json_only", 415);
-    const b = await readBody(req);
+    const b = await readBody(req).catch(() => undefined); // client dropped mid-upload
+    if (b === undefined) return fail("bad_body", 400);
     if (b === null) return fail("body_too_large", 413);
     body = b;
   }

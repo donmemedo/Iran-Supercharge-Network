@@ -430,7 +430,7 @@ function FleetForm() {
       await api("leads", { company: v("company").trim(), kind: v("kind"), fleet_size: Number(toAscii(v("size"))), phone: toAscii(v("phone")).replace(/\D/g, "") });
       setState("done");
     } catch (x) {
-      setState(x instanceof ApiError && x.status === 429 ? "rate" : "error");
+      setState(x instanceof ApiError && (x.status === 429 || x.detail === "client_limit") ? "rate" : "error"); // both mean: too many from here
     }
   };
   const input = "mt-1.5 min-h-12 w-full rounded-2xl border border-line bg-bg/60 px-4 text-base outline-none focus:border-accent aria-[invalid=true]:border-neg";

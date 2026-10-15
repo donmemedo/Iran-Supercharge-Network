@@ -42,6 +42,7 @@ def test_reservation_flow_and_capacity():
     assert cl.post("/api/reservations", json={**body, "hub_id": "yazd-safaieh"}).status_code == 404  # planned hub
     past = (upcoming_slots(now_irt())[0].replace(year=2020)).isoformat()
     assert cl.post("/api/reservations", json={**body, "slot": past}).status_code == 409
+    assert cl.post("/api/reservations", json={**body, "slot": "0001-01-01T00:00:00+14:00"}).status_code == 409  # was a 500
     assert slot_capacity("palladium", upcoming_slots(now_irt())[0]) == 0
 
 
@@ -52,6 +53,14 @@ def test_two_active_reservations_per_phone():
     assert [cl.post("/api/reservations", json={**body, "slot": s["at"]}).status_code for s in slots[:2]] == [201, 201]
     r = cl.post("/api/reservations", json={**body, "slot": slots[2]["at"]})
     assert r.status_code == 409 and r.json()["detail"] == "phone_limit"
+
+
+def test_active_reservations_per_client():
+    cl = as_ip("10.0.0.6")
+    slots = [s for h in ("milad", "iranmall", "azadi") for s in cl.get(f"/api/hubs/{h}/slots").json()[:3] if s["left"]]
+    hubs = [h for h in ("milad", "iranmall", "azadi") for _ in range(3)]
+    codes = [cl.post("/api/reservations", json={"hub_id": h, "slot": s["at"], "name": "Ali", "phone": f"0936000{i:04d}"}).status_code for i, (h, s) in enumerate(zip(hubs, slots))]
+    assert codes[:6] == [201] * 6 and codes[6] == 409  # new phone each time, still capped per client
 
 
 def test_rate_limit_per_client():
@@ -65,7 +74,8 @@ def test_rate_limit_per_client():
 
 def test_ipv6_clients_grouped_by_64():
     assert client_key("2001:db8::1") == client_key("2001:db8::ffff") != client_key("2001:db8:0:1::1")
-    assert client_key("1.2.3.4") == "1.2.3.4" and client_key(None) == "unknown"
+    assert client_key("1.2.3.4") == "1.2.3.4" == client_key("::ffff:1.2.3.4") != client_key("::ffff:5.6.7.8")
+    assert client_key(None) == "unknown"
 
 
 def test_expired_reservations_are_pruned():

@@ -20,6 +20,7 @@ const csp = [
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  compress: false, // the Caddy edge compresses (zstd/gzip); Node gzipping first would make Caddy pass it through
   images: { unoptimized: true }, // next/image is unused; keeps the /_next/image optimizer (SSRF advisories, sharp) out of play
   async redirects() {
     return [{ source: "/", destination: "/fa", permanent: false }];

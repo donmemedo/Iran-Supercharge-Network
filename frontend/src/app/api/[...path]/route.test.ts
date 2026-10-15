@@ -36,6 +36,11 @@ test("bodies over 8 KB are refused, with or without content-length", async () =>
   assert.equal((await call("POST", ["leads"], { headers: json, body: chunked, duplex: "half" } as RequestInit)).status, 413);
 });
 
+test("a client that drops mid-upload gets a 400, not an unhandled error", async () => {
+  const broken = new ReadableStream({ start: (c) => (c.enqueue(new Uint8Array(10)), c.error(new Error("aborted"))) });
+  assert.equal((await call("POST", ["leads"], { headers: json, body: broken, duplex: "half" } as RequestInit)).status, 400);
+});
+
 test("forwards only a well-formed first-hop client IP and passes caching/limit headers back", async () => {
   const r = await call("POST", ["leads"], { headers: { ...json, "x-forwarded-for": "203.0.113.9, 10.0.0.1" }, body: "{}" });
   assert.equal(seen?.headers["x-forwarded-for"], "203.0.113.9");

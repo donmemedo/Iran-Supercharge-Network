@@ -84,7 +84,9 @@ export function ReserveSheet({ hub, onClose }: { hub: Hub | null; onClose: () =>
       setDone(await api<Done>("reservations", { hub_id: hub.id, slot, name, phone }));
     } catch (x) {
       const s = x instanceof ApiError ? x.status : 0;
-      if (s === 409 && x instanceof ApiError && x.detail === "phone_limit") setErrors({ phone: r.errors.phoneLimit });
+      const detail = x instanceof ApiError ? x.detail : null;
+      if (detail === "phone_limit") setErrors({ phone: r.errors.phoneLimit });
+      else if (detail === "client_limit") setErrors({ form: r.errors.clientLimit });
       else if (s === 409) {
         setErrors({ slot: r.errors.full });
         setSlot(null);

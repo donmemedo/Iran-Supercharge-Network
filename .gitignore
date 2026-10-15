@@ -12,3 +12,4 @@ graphify-out/.graphify_*
 graphify-out/manifest.json
 graphify-out/cost.json
 .env*
+backend/wheels/
