@@ -1,13 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useId, useState, type ComponentProps } from "react";
 import { flushSync } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useI18n } from "@/i18n/use";
 
-export const spring = { type: "spring", visualDuration: 0.45, bounce: 0.15 } as const;
+export const spring = { type: "spring", visualDuration: 0.4, bounce: 0 } as const;
 
 export function Mark({ className = "size-8" }: { className?: string }) {
   const id = useId();
@@ -84,7 +84,7 @@ export function ThemeToggle() {
 
   const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
   return (
-    <button type="button" onClick={cycle} className={iconBtn} aria-label={t.theme[theme]} title={t.theme[theme]}>
+    <button type="button" onClick={cycle} className={iconBtn} aria-label={`${t.theme.label}: ${t.theme[theme]}`} title={`${t.theme.label}: ${t.theme[theme]}`}>
       <AnimatePresence mode="popLayout" initial={false}>
         <motion.span
           key={theme}
@@ -120,35 +120,6 @@ export function LangSwitch() {
     >
       {t.lang.other}
     </a>
-  );
-}
-
-export function Segmented<T extends string>({ options, value, onChange, id, label, className = "" }: { options: { id: T; label: ReactNode }[]; value: T; onChange: (v: T) => void; id: string; label: string; className?: string }) {
-  const box = useRef<HTMLDivElement>(null);
-  // keep the active pill visible on load / TV rotation, not only on click (phones scroll this row)
-  // horizontal-only (scrollIntoView would also jump the page to below-the-fold toggles); deltas work in RTL too
-  useEffect(() => {
-    const b = box.current, a = b?.querySelector<HTMLElement>("[aria-pressed=true]");
-    if (b && a) b.scrollBy({ left: a.getBoundingClientRect().left - b.getBoundingClientRect().left - (b.clientWidth - a.offsetWidth) / 2, behavior: "smooth" });
-  }, [value]);
-  return (
-    <div ref={box} role="group" aria-label={label} className={`glass-thin no-scrollbar flex max-w-full gap-1 overflow-x-auto rounded-full p-1 ${className}`}>
-      {options.map((o) => {
-        const on = o.id === value;
-        return (
-          <button
-            key={o.id}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onChange(o.id)}
-            className={`press relative isolate flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 text-sm font-medium ${on ? "text-fg" : "text-muted hover:text-fg"}`}
-          >
-            {on && <motion.span layoutId={id} transition={spring} className="absolute inset-0 -z-10 rounded-full bg-card shadow-[0_2px_10px_-3px_var(--shadow)] ring-1 ring-line" />}
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 

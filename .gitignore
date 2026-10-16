@@ -7,3 +7,10 @@ backend/data/
 
 Docs
 .idea
+graphify-out/cache/
+graphify-out/.graphify_*
+graphify-out/manifest.json
+graphify-out/cost.json
+.env*
+backend/wheels/
+graphify-out/20*/

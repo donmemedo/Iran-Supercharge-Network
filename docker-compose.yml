@@ -1,8 +1,21 @@
+# Only the edge is published. The backend sits on an internal-only network that the edge cannot reach,
+# so the frontend proxy (and its checks) is the only way in, and the backend has no egress at all.
+x-hardened: &hardened
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp"]
+
 services:
   backend:
+    <<: *hardened
     build: ./backend
-    ports: ["8020:8000"]
-    restart: unless-stopped
+    networks: [internal]
+    environment:
+      FORWARDED_ALLOW_IPS: "*" # safe because only the frontend shares the internal network
+    mem_limit: 256m
+    pids_limit: 64
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 10s
@@ -10,11 +23,50 @@ services:
       retries: 5
 
   frontend:
+    <<: *hardened
     build: ./frontend
-    ports: ["${FRONTEND_PORT:-3020}:3000"]
+    tmpfs: ["/tmp", "/app/.next/cache"]
+    networks: [web, internal]
     environment:
       BACKEND_URL: http://backend:8000
+    mem_limit: 512m
+    pids_limit: 128
     depends_on:
       backend:
         condition: service_healthy
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  edge:
+    <<: *hardened
+    image: caddy:2-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
+    cap_add: [NET_BIND_SERVICE]
+    networks: [web]
+    ports: ["${FRONTEND_PORT:-3020}:80", "${HTTPS_PORT:-3443}:443", "${HTTPS_PORT:-3443}:443/udp"]
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1/32}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: 128m
+    pids_limit: 64
+    depends_on:
+      frontend:
+        condition: service_healthy
+
+networks:
+  web:
+    # On a host with an AAAA record, set ENABLE_IPV6=true (Docker 27+). Without it Docker's userland proxy hands
+    # IPv6 visitors to Caddy as one gateway address, so they would all share one rate-limit bucket.
+    enable_ipv6: ${ENABLE_IPV6:-false}
+  internal:
+    internal: true
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -38,22 +38,31 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 
-/** Fetch now and every `ms` while the tab is visible. */
+/** Fetch now and every `ms` while the tab is visible. While the API is failing, back off up to 60 s so an outage isn't hammered by every open tab. */
 export function usePoll<T>(path: string, ms: number) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
-    let alive = true;
-    const load = () =>
-      api<T>(path).then(
-        (d) => alive && (setData(d), setError(false)),
-        () => alive && setError(true),
-      );
+    let alive = true, busy = false, timer = 0, delay = ms;
+    const load = async () => {
+      if (busy || document.visibilityState !== "visible") return; // hidden tabs stop; visibilitychange resumes
+      busy = true;
+      clearTimeout(timer);
+      try {
+        const d = await api<T>(path);
+        if (alive) (setData(d), setError(false), (delay = ms));
+      } catch {
+        if (alive) (setError(true), (delay = Math.min(delay * 2, 60_000)));
+      }
+      busy = false;
+      if (alive) timer = window.setTimeout(load, delay);
+    };
     load();
-    const id = setInterval(() => document.visibilityState === "visible" && load(), ms);
+    document.addEventListener("visibilitychange", load);
     return () => {
       alive = false;
-      clearInterval(id);
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", load);
     };
   }, [path, ms]);
   return { data, error };

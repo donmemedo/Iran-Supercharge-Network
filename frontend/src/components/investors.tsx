@@ -1,13 +1,13 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Plus } from "lucide-react";
 import { fill } from "@/i18n";
 import { useI18n } from "@/i18n/use";
 import { api, type Financials, type Month } from "@/lib/api";
 import { num, pct } from "@/lib/format";
 import { Card } from "./ui";
-import { Footer, Reveal } from "./landing";
+import { Reveal } from "./sections";
 
 const W = 640, H = 240, L = 40, R = 8, T = 12, B = 28;
 
@@ -107,7 +107,7 @@ function Legend({ items }: { items: [string, string][] }) {
 
 const GROUP_COLORS = { company: "var(--c5)", site: "var(--c4)", equipment: "var(--c2)", launch: "var(--c1)" } as const;
 
-export function Investors() {
+export function Investors({ footer }: { footer: ReactNode }) {
   const { locale, t } = useI18n();
   const [f, setF] = useState<Financials | null>(null);
   const [err, setErr] = useState(false);
@@ -257,7 +257,7 @@ export function Investors() {
             </Reveal>
           </div>
         )}
-        <Footer />
+        {footer}
       </main>
     </>
   );
