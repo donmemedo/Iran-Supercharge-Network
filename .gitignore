@@ -13,3 +13,4 @@ graphify-out/manifest.json
 graphify-out/cost.json
 .env*
 backend/wheels/
+graphify-out/20*/

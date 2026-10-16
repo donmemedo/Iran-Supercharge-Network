@@ -24,6 +24,7 @@ export function ReserveSheet({ hub, onClose }: { hub: Hub | null; onClose: () =>
   const y = useMotionValue(0);
   const drag = useDragControls();
   const reduce = useReducedMotion();
+  const dragged = useRef(false); // a drag released over the backdrop also fires a backdrop click: ignore that one
   const [slots, setSlots] = useState<Slot[] | null>(null);
   const [slot, setSlot] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -48,6 +49,7 @@ export function ReserveSheet({ hub, onClose }: { hub: Hub | null; onClose: () =>
 
   // Release: hand the finger's velocity to the spring, and decide from where the flick is *going*, not where it let go.
   const onDragEnd = (_: unknown, info: PanInfo) => {
+    dragged.current = false; // runs on the frame after pointerup, i.e. after the stray click was already ignored
     const h = panel.current?.offsetHeight ?? 600;
     if (info.offset.y + project(info.velocity.y) < h / 2) return; // drag constraints spring it back home, carrying the velocity
     if (reduce) return close();
@@ -101,7 +103,7 @@ export function ReserveSheet({ hub, onClose }: { hub: Hub | null; onClose: () =>
   const Err = ({ k }: { k: string }) => (errors[k] ? <p id={`rs-${k}`} className="mt-1 text-xs text-neg">{errors[k]}</p> : null);
 
   return (
-    <dialog ref={ref} className="sheet" onClose={onClose} onClick={(e) => e.target === ref.current && close()} aria-labelledby="rs-title">
+    <dialog ref={ref} className="sheet" onClose={onClose} onClick={(e) => e.target === ref.current && !dragged.current && close()} aria-labelledby="rs-title">
       <motion.div
         ref={panel}
         drag="y"
@@ -109,6 +111,7 @@ export function ReserveSheet({ hub, onClose }: { hub: Hub | null; onClose: () =>
         dragControls={drag}
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={{ top: 0.06, bottom: 1 }} // 1:1 downward, rubber-band resistance upward
+        onDragStart={() => (dragged.current = true)}
         onDragEnd={onDragEnd}
         style={{ y, background: "var(--card-solid)" }}
         className="glass rounded-t-[32px] p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:rounded-[32px] sm:p-8"

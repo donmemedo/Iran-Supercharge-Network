@@ -67,7 +67,7 @@ _booked: dict[tuple[str, str], int] = {}
 _leads: dict[str, dict] = {}  # keyed by phone: a resubmit updates the lead instead of adding a row
 _hits: dict[str, deque] = {}  # client -> timestamps of recent writes
 _state = {"window": "", "swept": 0.0}
-MAX_ROWS = 10_000  # ponytail: in-memory store, lost on restart; move to Postgres when real bookings exist
+MAX_ROWS = 10_000  # leads only. ponytail: in-memory store, lost on restart; move to Postgres when real bookings exist
 MAX_BODY = 8 * 1024  # largest valid JSON body is ~250 bytes
 RATE_N, RATE_WINDOW = 10, 60.0  # writes per client per minute; NAT'd mobile users share an IP, so keep it loose
 MAX_PER_PHONE = 2  # active reservations per phone number
@@ -268,7 +268,7 @@ def reserve(body: ReservationIn, request: Request):
             raise HTTPException(409, "phone_limit")
         if sum(r["client"] == key for r in _reservations.values()) >= MAX_PER_CLIENT:
             raise HTTPException(409, "client_limit")
-        if len(_reservations) >= MAX_ROWS or slot_capacity(body.hub_id, slot) <= 0:
+        if slot_capacity(body.hub_id, slot) <= 0:  # with pruning, live bookings are bounded by seats (< 500): no row cap needed
             raise HTTPException(409, "slot_full")
         while (code := "ISN-" + secrets.token_hex(4).upper()) in _reservations:  # 4.3B codes, retry on the rare clash
             pass

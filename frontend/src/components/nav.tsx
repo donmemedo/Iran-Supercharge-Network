@@ -38,7 +38,7 @@ function useLinks() {
     { href: `${home}#calc`, label: t.nav.calculator, Icon: Calculator, on: path === home && section === "calc" },
     { href: `${home}#plans`, label: t.nav.plans, Icon: Crown, on: path === home && section === "plans" },
     { href: `${home}/investors`, label: t.nav.investors, Icon: ChartNoAxesCombined, on: path === `${home}/investors` },
-  ];
+  ].map((l) => ({ ...l, current: l.on ? (l.href.includes("#") ? ("location" as const) : ("page" as const)) : undefined }));
 }
 
 export function Nav() {
@@ -51,7 +51,7 @@ export function Nav() {
         <ul className="ms-6 hidden gap-1 md:flex">
           {links.map((l) => (
             <li key={l.href}>
-              <Link href={l.href} aria-current={l.on ? (l.href.includes("#") ? "location" : "page") : undefined} className={`press rounded-full px-4 py-2 text-sm font-medium hover:text-fg ${l.on ? "text-fg" : "text-muted"}`}>
+              <Link href={l.href} aria-current={l.current} className={`press rounded-full px-4 py-2 text-sm font-medium hover:text-fg ${l.on ? "text-fg" : "text-muted"}`}>
                 {l.label}
               </Link>
             </li>
@@ -75,9 +75,9 @@ export function TabBar() {
   return (
     <nav aria-label={t.nav.menu} className="glass-thin blur fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 rounded-[26px] md:hidden">
       <ul className="grid grid-cols-5">
-        {useLinks().map(({ href, label, Icon, on }) => (
+        {useLinks().map(({ href, label, Icon, on, current }) => (
           <li key={href}>
-            <Link href={href} aria-current={on ? (href.includes("#") ? "location" : "page") : undefined} className={`press flex min-h-14 flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium ${on ? "text-accent" : "text-muted"}`}>
+            <Link href={href} aria-current={current} className={`press flex min-h-14 flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium ${on ? "text-accent" : "text-muted"}`}>
               <Icon className="size-5" aria-hidden />
               <span className="truncate">{label}</span>
             </Link>

@@ -46,11 +46,15 @@ Session 3, committed:
   - Blur is limited to the nav and tab bar, and cards are near-solid. Gradient text is static. Dead `Segmented` and CSS animations are gone. Why, FAQ and Footer are server components passed in as slots.
 - **Skipped:** a scripted live attack-replay against the local backends was stopped by the safety classifier. As instructed, the model was not changed and that step was dropped. The backend and proxy regression tests cover the same behaviours.
 
-Still to do:
-1. The npm upgrade to next 16.4.0 was running at handoff. When it finishes, check that `package.json` shows 16.4.0 and run `npm audit --omit=dev`. If sharp or source-map-js are still flagged, run `npm update sharp source-map-js --no-audit`. Then commit `package.json` and `package-lock.json`.
-2. Re-run `node node_modules/typescript/bin/tsc --noEmit`. The last run's errors all cascaded from npm being mid-install. Run `next build` if `free -m` shows 1.5 GB or more.
-3. Run a defensive review workflow over the diff: backend correctness, proxy and CSP, infra, apple-design UI, and ponytail-review, then verify each finding.
-4. Write the report with the attack tree mapped to mitigations, scan results and the performance table. Run `graphify update .`, then open the PR from `audit/security-perf-ui`.
+Session 4 (2026-10-15/16), committed:
+- Next 16.4.0, sharp 0.35.5 and source-map-js 1.2.2. `npm audit --omit=dev` reports 0. `tsc` passes. `next build` passes, with all pages still static SSG.
+- The review workflow findings R1 to R10 are fixed. See `SECURITY_REPORT.md` section 7.
+- The report `SECURITY_REPORT.md` is written, the graph has been refreshed with `graphify update .`, and the PR is open.
+
+Remaining (optional):
+- Run `docker compose up --build` once on a host with enough memory. Images were never built in these sessions.
+- The UI and ponytail reviews were done inline because subagents kept hitting the usage limit. A second independent UI pass is still worthwhile.
+- Run `graphify label` to rename the 12 rebuilt communities, which are currently named by their hub node.
 
 ## 3. Project map
 
